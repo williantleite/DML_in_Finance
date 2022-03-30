@@ -59,5 +59,5 @@ active_df.insert(0, "year", active_df.pop("year"))
 active_df.insert(1, "month", active_df.pop("month"))
 active_df = active_df.iloc[9:,] #We do this so that the active funds dataset has the same shape as the passive funds dataset.
     
-passive_df.to_csv('passive_df.csv', index=False)
-active_df.to_csv('active_df.csv', index=False)
+passive_df.to_csv('passive_prices_df.csv', index=False)
+active_df.to_csv('active_prices_df.csv', index=False)
