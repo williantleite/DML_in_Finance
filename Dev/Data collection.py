@@ -2,7 +2,7 @@
 """
 Created on Mon Mar 28 18:02:52 2022
 
-@author: willi
+@author: willi och gojja
 """
 
 ### Building Financial dataset from Yahoo Finance
@@ -11,7 +11,7 @@ import pandas as pd
 import yfinance as yf
 from yahoofinancials import YahooFinancials
 
-passive_list = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\List 1948 Passive Funds.csv", 
+passive_list = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Funds\List 1948 Passive Funds.csv", 
                            names = ["ticker", "name", "inception_date",
                                     "fund_asset_class_focus", "parent_comp_name",
                                     "fund_industry_focus", "tot_asset_mil"], 
@@ -19,7 +19,7 @@ passive_list = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\List 19
 
 passive_list["ticker"] = passive_list["ticker"].str.replace(r'\sUS Equity', '')
 
-active_list = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\List 4976 Active Funds.csv", 
+active_list = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Funds\List 4976 Active Funds.csv", 
                           names = ["ticker", "name", "inception_date",
                                    "fund_asset_class_focus", "parent_comp_name",
                                    "fund_industry_focus", "tot_asset_mil"], 
