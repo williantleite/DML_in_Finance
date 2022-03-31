@@ -60,7 +60,7 @@ noncyclical_rate_of_unemployment_df.to_csv('noncyclical_rate_of_unemployment_df.
 # Real GDP
 
 real_gdp_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Real-GDP\Real_GDP.csv")
-
+real_gdp_df.iloc[:,1] = real_gdp_df.iloc[:,1].pct_change(periods=1)
 real_gdp_df = date_addition(real_gdp_df)
 
 real_gdp_df.to_csv('real_gdp_df.csv', index=False)
