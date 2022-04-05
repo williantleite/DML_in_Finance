@@ -98,27 +98,35 @@ fl_passive_df.to_csv("fl_passive_df.csv", index=False)
 #%%
 ## Correlation and Multicollinearity Analysis
 
-x_corr = x_subset.corr()
+x_corr = x_subset.iloc[:, 2:].corr()
 
-def vif(X):
+from sklearn.decomposition import PCA
 
-    # Calculating VIF
-    vif = pd.DataFrame()
-    vif["variables"] = X.columns
-    vif["VIF"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
+pca = PCA(.95)
+pca.fit(x_corr)
+principalComponents = pca.transform(x_corr)
+principalDf = pd.DataFrame(data = principalComponents, columns = ['PC1', 'PC2', 'PC3'])
+pca.explained_variance_ratio_
+pca.n_components_
+# def vif(X):
 
-    return(vif)
+#     # Calculating VIF
+#     vif = pd.DataFrame()
+#     vif["variables"] = X.columns
+#     vif["VIF"] = [variance_inflation_factor(X.values, i) for i in range(X.shape[1])]
 
-vif_fred = vif(fred_subset_scaled)
+#     return(vif)
 
-fred_subset_scaled2 = fred_subset_scaled.drop(["m2", "inflation"], axis=1)
-vif_fred2 = vif(fred_subset_scaled2)
-fred_subset_scaled2_corr = fred_subset_scaled2.corr()
+# vif_fred = vif(x_subset.iloc[:,2:])
 
-fred_subset_scaled3 = fred_subset_scaled2.drop("nrou", axis=1)
-vif_fred3 = vif(fred_subset_scaled3)
-fred_subset_scaled3_corr = fred_subset_scaled3.corr()
+# x_subset2 = x_subset.iloc[:,2:].drop(["m2", "inflation"], axis=1)
+# vif_fred2 = vif(x_subset2)
+# x_subset2_corr = x_subset2.corr()
 
-fred_subset_scaled4 = fred_subset_scaled3.drop("hpi", axis=1)
-vif_fred4 = vif(fred_subset_scaled4)
-fred_subset_scaled4_corr = fred_subset_scaled4.corr()
+# x_subset3 = x_subset2.drop("nrou", axis=1)
+# vif_fred3 = vif(x_subset3)
+# x_subset3_corr = x_subset3.corr()
+
+# x_subset4 = x_subset3.drop("hpi", axis=1)
+# vif_fred4 = vif(x_subset4)
+# x_subset4_corr = x_subset4.corr()
