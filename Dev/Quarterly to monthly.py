@@ -19,7 +19,7 @@ import pandas as pd
 
 def date_addition(df):
     df["DATE"] = pd.to_datetime(df["DATE"]).dt.to_period("M")
-    df = df.set_index("DATE").resample("M").pad()
+    df = df.set_index("DATE").resample("M").interpolate()
     df["year"], df["month"] = df.index.year, df.index.month
     df.insert(0, "year", df.pop("year"))
     df.insert(1, "month", df.pop("month"))
