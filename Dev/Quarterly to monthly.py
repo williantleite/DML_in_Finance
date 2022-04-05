@@ -32,12 +32,13 @@ def date_addition(df):
 anxious_index_df = pd.read_excel(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Anxious Index\anxious_index_chart.xlsx", sheet_name = "Data")
 anxious_index_df = anxious_index_df.iloc[3:,0:3] #Here we exclude the first three lines because they are empty, and also the last column because it is a variable we are not interested in.
 anxious_index_df.columns = ["year", "quarter", "anxious_index"]
+anxious_index_df = anxious_index_df.astype({"anxious_index": "float64"}, errors = "raise")
 month_dict = {1:"01", 2:"04", 3:"07", 4:"10"}
 anxious_index_df["month"] = anxious_index_df["quarter"].apply(lambda x:month_dict[x])
 anxious_index_df["year"] = anxious_index_df["year"].astype(str)
 anxious_index_df["DATE"] = anxious_index_df[["year", "month"]].agg("-".join, axis=1)
+anxious_index_df = anxious_index_df.drop(["year", "quarter", "month"], axis = 1)
 anxious_index_df = date_addition(anxious_index_df)
-anxious_index_df.pop("quarter")
 
 anxious_index_df.to_csv('anxious_index_df.csv', index=False)
 
