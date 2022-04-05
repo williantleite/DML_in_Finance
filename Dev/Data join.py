@@ -9,7 +9,8 @@ Created on Thu Mar 31 14:12:42 2022
 import pandas as pd
 from functools import reduce
 from statsmodels.stats.outliers_influence import variance_inflation_factor
-from sklearn.preprocessing import StandardScaler
+# from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import MinMaxScaler
 
 #Load data
 
@@ -43,6 +44,8 @@ m3_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other
 
 recession_dummy_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Recession\Recession_Indicators.csv")
 
+i_rate_growth_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\FEDFUNDS_growth_rate.csv")
+
 #Standardize date format for the variables that aren't standardized
 
 def date_reformat(df):
@@ -60,6 +63,7 @@ m2_df = date_reformat(m2_df)
 m3_df = date_reformat(m3_df)
 recession_dummy_df = date_reformat(recession_dummy_df)
 unrate_df = date_reformat(unrate_df)
+i_rate_growth_df = date_reformat(i_rate_growth_df)
 
 #Join the data
 
@@ -73,17 +77,21 @@ variables_list = [anxious_index_df,
                   m3_df, 
                   nrou_df, 
                   recession_dummy_df,
-                  unrate_df]
+                  unrate_df,
+                  i_rate_growth_df]
 
 x_df = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month'], how = "inner"), variables_list)
 
-x_df.columns = ["year", "month", "anxious_index", "consumer_sent", "inflation", "gdp", "hpi", "interest_rate", "m2", "m3", "nrou", "recession", "rou"]
+x_df.columns = ["year", "month", "anxious_index", "consumer_sent", "inflation", "gdp", "hpi", "interest_rate", "m2", "m3", "nrou", "recession", "rou", "i_rate_growth"]
 
 #Standardized before joining
 x_subset = x_df.iloc[132:,:].astype(float)
-std_scaler = StandardScaler()
-x_subset.iloc[:,2:] = std_scaler.fit_transform(x_subset.iloc[:,2:].to_numpy())
-x_subset = pd.DataFrame(x_subset, columns=x_subset.columns)
+# std_scaler = StandardScaler()
+scaler = MinMaxScaler()
+# x_subset.iloc[:,2:] = std_scaler.fit_transform(x_subset.iloc[:,2:].to_numpy())
+x_values = x_subset.iloc[:, 2:].values
+x_values = scaler.fit_transform(x_values)
+x_subset.iloc[:,2:] = pd.DataFrame(x_values, columns=x_subset.iloc[:,2:].columns)
 
 #Finally, join the data
 
