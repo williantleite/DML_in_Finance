@@ -11,6 +11,7 @@ from functools import reduce
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 # from sklearn.preprocessing import StandardScaler
 from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
 
 #Load data
 
@@ -28,42 +29,42 @@ anxious_index_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Cle
 
 nrou_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\noncyclical_rate_of_unemployment_df.csv")
 
-unrate_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Unemployment\UNRATE.csv")
+unrate_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\unrate_df.csv")
 
 gdp_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\real_gdp_df.csv")
 
-consumer_sentiment_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Consumer Sentiment\Consumer Sentiment.csv")
+consumer_sentiment_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\consumer_sentiment_df.csv")
 
-cpi_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\CPI\CPI.csv")
+cpi_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\cpi_df.csv")
 
-interest_rate_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\FED FUND\FEDFUNDS.csv")
+interest_rate_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\interest_rate_df.csv")
 
-m2_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Money supply\M2.csv")
+m2_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\m2_df.csv")
 
-m3_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Money supply\M3.csv")
+m3_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\m3_df.csv")
 
-recession_dummy_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Recession\Recession_Indicators.csv")
+recession_dummy_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\recession_dummy_df.csv")
 
-i_rate_growth_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\FEDFUNDS_growth_rate.csv")
+i_rate_growth_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\i_rate_growth_df.csv")
 
-#Standardize date format for the variables that aren't standardized
+# #Standardize date format for the variables that aren't standardized
 
-def date_reformat(df):
-    df["DATE"] = pd.to_datetime(df["DATE"])
-    df = df.set_index("DATE")
-    df["year"], df["month"] = df.index.year, df.index.month
-    df.insert(0, "year", df.pop("year"))
-    df.insert(1, "month", df.pop("month"))
-    return(df)
+# def date_reformat(df):
+#     df["DATE"] = pd.to_datetime(df["DATE"])
+#     df = df.set_index("DATE")
+#     df["year"], df["month"] = df.index.year, df.index.month
+#     df.insert(0, "year", df.pop("year"))
+#     df.insert(1, "month", df.pop("month"))
+#     return(df)
 
-consumer_sentiment_df = date_reformat(consumer_sentiment_df)
-cpi_df = date_reformat(cpi_df)
-interest_rate_df = date_reformat(interest_rate_df)
-m2_df = date_reformat(m2_df)
-m3_df = date_reformat(m3_df)
-recession_dummy_df = date_reformat(recession_dummy_df)
-unrate_df = date_reformat(unrate_df)
-i_rate_growth_df = date_reformat(i_rate_growth_df)
+# consumer_sentiment_df = date_reformat(consumer_sentiment_df)
+# cpi_df = date_reformat(cpi_df)
+# interest_rate_df = date_reformat(interest_rate_df)
+# m2_df = date_reformat(m2_df)
+# m3_df = date_reformat(m3_df)
+# recession_dummy_df = date_reformat(recession_dummy_df)
+# unrate_df = date_reformat(unrate_df)
+# i_rate_growth_df = date_reformat(i_rate_growth_df)
 
 #Join the data
 
@@ -80,33 +81,32 @@ variables_list = [anxious_index_df,
                   unrate_df,
                   i_rate_growth_df]
 
-x_df = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month'], how = "inner"), variables_list)
+x_df = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month', 'day'], how = "inner"), variables_list)
 
-x_df.columns = ["year", "month", "anxious_index", "consumer_sent", "inflation", "gdp", "hpi", "interest_rate", "m2", "m3", "nrou", "recession", "rou", "i_rate_growth"]
+x_df.columns = ["year", "month", "day", "anxious_index", "consumer_sent", "inflation", "gdp", "hpi", "interest_rate", "m2", "m3", "nrou", "recession", "rou", "i_rate_growth"]
 
 #Standardized before joining
-x_subset = x_df.iloc[132:,:].astype(float)
 # std_scaler = StandardScaler()
 scaler = MinMaxScaler()
-# x_subset.iloc[:,2:] = std_scaler.fit_transform(x_subset.iloc[:,2:].to_numpy())
-x_values = x_subset.iloc[:, 2:].values
+# x_df.iloc[:,3:] = std_scaler.fit_transform(x_df.iloc[:,3:].to_numpy())
+x_values = x_df.iloc[:, 3:].values
 x_values = scaler.fit_transform(x_values)
-x_subset.iloc[:,2:] = pd.DataFrame(x_values, columns=x_subset.iloc[:,2:].columns)
+x_df.iloc[:,3:] = pd.DataFrame(x_values, columns=x_df.iloc[:,3:].columns)
 
 #Finally, join the data
 
-fl_active_df = pd.merge(l_active_df, x_subset, on = ['year', 'month'], how = "inner")
+fl_active_df = pd.merge(l_active_df, x_df, on = ['year', 'month'], how = "inner")
 
 fl_active_df.to_csv("fl_active_df.csv", index=False)
 
-fl_passive_df= pd.merge(l_passive_df, x_subset, on = ['year', 'month'], how = "inner")
+fl_passive_df= pd.merge(l_passive_df, x_df, on = ['year', 'month'], how = "inner")
 
 fl_passive_df.to_csv("fl_passive_df.csv", index=False)
 
 #%%
 ## Correlation and Multicollinearity Analysis
 
-x_corr = x_subset.iloc[:, 2:].corr()
+x_corr = x_df.iloc[:, 3:].corr()
 
 from sklearn.decomposition import PCA
 
@@ -138,3 +138,8 @@ pca.n_components_
 # x_subset4 = x_subset3.drop("hpi", axis=1)
 # vif_fred4 = vif(x_subset4)
 # x_subset4_corr = x_subset4.corr()
+
+for i in range(x_df.iloc[2922:,3:].shape[1]):
+    plt.plot(x_df.iloc[2922:,(3+i)])
+    plt.title(x_df.iloc[2922:,(3+i)].name)
+    plt.show()
