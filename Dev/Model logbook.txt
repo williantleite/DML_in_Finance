@@ -1,0 +1,121 @@
+#Logbook of FFNN
+
+#Model 1
+#Min Max scale at -1 to 1 range with hyperbolic tangent activation function.
+#Loss centered around 0.34 which is a problem. Val_loss centered around 0.33
+#Data scaled based on the full dataset rather than on the training only.
+input1 = Input(shape=11)
+        ff = Dense(15, activation = 'tanh')(input1)
+        ff = Dense(10, activeation = 'tanh')(ff)
+        ff = Dense(5, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam', metrics = ['mse'])
+		
+		history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 20)
+		
+#Model 2
+Same as model 1 but with data scaled based on training only.
+#Loss fell started at 0.1196 and ended at 0.0088, and val_loss starting at 0.0388 and ending at 0.0085.
+#Better results as the loss drops over time now as one would expect, but it seems to be too low.
+
+#Model 3
+#Same as model 1 but using StandardScaler() rather than MinMaxScaler(feature_range=(-1,1)).
+#Here the loss starts 1.0181 and ends at 0.9734. The val_loss starts at 1.0264 and ends at 1.0196.
+#This model seems to follow the overall convention but is still very bad. Also makes me think that model 2 is overfitted af.
+#Here RSS was 1339.
+
+#Model 4
+#Same as model 1 but with the following configuration:
+input1 = Input(shape=11)
+        ff = Dense(150, activation = 'tanh')(input1)
+        ff = Dense(100, activation = 'tanh')(ff)
+        ff = Dense(50, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam', metrics = ['mse'])
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 20)
+
+#This model in particular is still very bad as it seems to overfit by a lot while still being very bad at any prediction even for the 
+#training. From plotting y_hat and the real y on both the scaled and descaled version we can see the main problem is the lack of variation
+#in the prediction. So the idea now is to test with more layers to see if it causes any difference.
+
+#Model 5
+
+#Increasing the number of nodes and layers did not improve the model as we expected (in terms of adding more variation), matter of fact
+#it reduced the variation and almost turned the problem into a classification one that seems to correctly classify whether it is a recession
+#or not. I believe now we might profit from having much less layers and nodes, and we still have to test what happens if we detrend all of the data.
+
+        input1 = Input(shape=11)
+        ff = Dense(250, activation = 'tanh')(input1)
+        ff = Dense(200, activation = 'tanh')(ff)
+        ff = Dense(150, activation = 'tanh')(ff)
+        ff = Dense(100, activation = 'tanh')(ff)
+        ff = Dense(50, activation = 'tanh')(ff)
+        ff = Dense(25, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam', metrics = ['mse'])
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 200)
+
+#Model 6
+#Here I tried the opposite strategy by having a wide architecture rather than a deep one. The result is definitely better when plotting y_hat
+#but it is somewhat hard to define how good this model is given it is still very close to the same loss we had in the first models (though I must
+#say this has been the lowest loss so far, which is also a bit worrying).
+
+        input1 = Input(shape=11)
+        ff = Dense(300, activation = 'tanh')(input1)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam', metrics = ['mse'])
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 200)
+		
+#Model 7
+#We aggregated the data and ran the average fund growth rate instead. I changed the model back to a few more layers and fewer nodes and got a result 
+#similar to model 3 but only slightly better.
+
+        input1 = Input(shape=11)
+        ff = Dense(15, activation = 'tanh')(input1)
+        ff = Dense(10, activation = 'tanh')(ff)
+        ff = Dense(5, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam')
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 200)
+		
+#Model 8 
+#Same as model 7 but with sigmoid rather than hyperbolic tangent. No improvement. Results very similar to model 7 but a bit worse. Graphs for both model 7 and 8 indicate some deep flaw in the model. Plotting predicted values show extremely bad predictions.
+        input1 = Input(shape=11)
+        ff = Dense(15, activation = 'sigmoid')(input1)
+        ff = Dense(10, activation = 'sigmoid')(ff)
+        ff = Dense(5, activation = 'sigmoid')(ff)
+        out = Dense(1, activation = 'sigmoid')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam')
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 200)
+		
+#Model 9
+#More layers, more nodes, more epochs. Overall same results in terms of loss, but much better results in terms of prediction? At least when plotting.
+        input1 = Input(shape=11)
+        ff = Dense(250, activation = 'tanh')(input1)
+        ff = Dense(200, activation = 'tanh')(ff)
+        ff = Dense(150, activation = 'tanh')(ff)
+        ff = Dense(100, activation = 'tanh')(ff)
+        ff = Dense(50, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
+        model = Model(inputs=input1, outputs=out)
+        
+        model.compile(loss = ['mse'], optimizer = 'adam')
+
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 1000)

@@ -9,7 +9,11 @@ import pandas as pd
 import numpy as np
 
 x = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\x_df.csv")
-y = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\passive_prices_df.csv")
+y = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\passive_prices_df.csv", index_col=0)
+
+agg_y = y.iloc[:,:3]
+agg_y["mean"] = y.iloc[:,3:].mean(axis=1)
+agg_y = agg_y[np.isfinite(agg_y).all(axis = 1)]
 
 # Creating train, val and test subsamples, for each fund.
 def subsample(y, x):
@@ -26,40 +30,64 @@ def subsample(y, x):
         subsets[0,i], subsets[1,i], subsets[2,i] = train.index.tolist(), val.index.tolist(), test.index.tolist()
     return(subsets)
 
-subsets = subsample(y,x)
+subsets = subsample(agg_y,x)
 
-from sklearn.preprocessing import MinMaxScaler
+from sklearn.preprocessing import StandardScaler
 
 from keras.layers import Dense, Input
 from keras.models import Model, Sequential
 import keras
 import tensorflow as tf
-
-
+import matplotlib.pyplot as plt
 
 def scale(y, x):
-    X = pd.merge(y,x, on=['year', 'month', 'day'], how = "inner")
+    X = pd.merge(agg_y,x, on=['year', 'month', 'day'], how = "inner")
     X = X.iloc[:,3:]
-    scaler = MinMaxScaler()
+    scaler = StandardScaler()
     for i in range(y.iloc[:,3:].shape[1]):
-        temp = X.iloc[:, np.r_[0, -11:0]].dropna(how='any')
-        transf = pd.DataFrame(scaler.fit_transform(temp)).set_index(temp.index)
-        X_train = transf.loc[subsets[0,0]]
-        X_val = transf.loc[subsets[1,0]]
-        X_test = transf.loc[subsets[2,0]]
-            
+        temp = X.dropna(how='any')
+        X_train = temp.loc[subsets[0,0]]
+        X_val = temp.loc[subsets[1,0]]
+        X_test = temp.loc[subsets[2,0]]
+        X_train = pd.DataFrame(scaler.fit_transform(X_train)).set_index(X_train.index)
+        X_val = pd.DataFrame(scaler.transform(X_val)).set_index(X_val.index)
+        X_test = pd.DataFrame(scaler.transform(X_test)).set_index(X_test.index)
+        
         input1 = Input(shape=11)
-        ff = Dense(15, activation = 'relu')(input1)
-        ff = Dense(5, activation = 'relu')(ff)
-        out = Dense(1, activation = 'relu')(ff)
+        ff = Dense(250, activation = 'tanh')(input1)
+        ff = Dense(200, activation = 'tanh')(ff)
+        ff = Dense(150, activation = 'tanh')(ff)
+        ff = Dense(100, activation = 'tanh')(ff)
+        ff = Dense(50, activation = 'tanh')(ff)
+        out = Dense(1, activation = 'tanh')(ff)
         model = Model(inputs=input1, outputs=out)
         
-        model.compile(loss = 'mean_absolute_error', optimizer = 'adam',metrics=['accuracy'])
+        model.compile(loss = ['mse'], optimizer = 'adam')
 
-        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 100)
+        history = model.fit(x=X_train.iloc[:,1:], y=X_train.iloc[:,0], validation_data = (X_val.iloc[:,1:], X_val.iloc[:,0]), epochs = 1000)
         
+        test_loss = model.evaluate(x = X_test.iloc[:,1:], y = X_test.iloc[:,0])
+        
+        y_hat = pd.DataFrame(model.predict(X_test.iloc[:,1:]))
         
     return(transf)
+
+def plot_history(history):
+    hist = pd.DataFrame(history.history)
+    hist['epoch'] = history.epoch
+    plt.figure()
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.plot(hist['epoch'], hist['loss'],
+             label='Train Loss')
+    plt.plot(hist['epoch'], hist['val_loss'],
+             label = 'Val Loss')
+    plt.ylim([0.5,1.2])
+    plt.legend()
+    plt.figure()
+    plt.show()
+
+plot_history(history)
         
 
 # fix the scaling so that we fit on the train and apply on the train, val and test seperatly.
