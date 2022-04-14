@@ -21,3 +21,4 @@
 /Data/Raw[[:space:]]Data/Funds/List[[:space:]]1948[[:space:]]Passive[[:space:]]Funds.csv filter=lfs diff=lfs merge=lfs -text
 /Data/Raw[[:space:]]Data/Funds/List[[:space:]]4976[[:space:]]Active[[:space:]]Funds.csv filter=lfs diff=lfs merge=lfs -text
 /Data/Raw[[:space:]]Data/Other[[:space:]]Variables/Recession/Recession_Indicators.xls filter=lfs diff=lfs merge=lfs -text
+*.csv filter=lfs diff=lfs merge=lfs -text
