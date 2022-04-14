@@ -66,7 +66,7 @@ variables_list = [anxious_index_df,
                   gdp_df, 
                   house_price_index_df, 
                   interest_rate_df, 
-                  m3_df, 
+                  m2_df, 
                   nrou_df, 
                   recession_dummy_df,
                   unrate_df,
@@ -74,7 +74,7 @@ variables_list = [anxious_index_df,
 
 x_df = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month', 'day'], how = "inner"), variables_list)
 
-x_df.columns = ["year", "month", "day", "anxious_index", "consumer_sent", "inflation", "gdp_growth", "hpi", "interest_rate", "m3", "nrou", "recession", "rou", "i_rate_growth"]
+x_df.columns = ["year", "month", "day", "anxious_index", "consumer_sent", "inflation", "gdp_growth", "hpi", "interest_rate", "m2", "nrou", "recession", "rou", "i_rate_growth"]
 
 x_df.to_csv('x_df.csv', index = False)
 
