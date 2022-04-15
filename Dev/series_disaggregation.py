@@ -58,9 +58,9 @@ anxious_index_df["month"] = anxious_index_df["quarter"].apply(lambda x:month_dic
 anxious_index_df["year"] = anxious_index_df["year"].astype(str)
 anxious_index_df["DATE"] = anxious_index_df[["year", "month"]].agg("-".join, axis=1)
 anxious_index_df = anxious_index_df.drop(["year", "quarter", "month"], axis = 1)
-anxious_index_df = interpolate_monthly(anxious_index_df)
+anxious_index_df = pad_monthly(anxious_index_df)
 
-anxious_index_df.to_csv('anxious_index_m_df.csv', index=False)
+anxious_index_df.to_csv('anxious_index_m_df.csv', index=False)  
 
 #%% House Price Index
 house_price_index_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\House prices\All-Transactions_House_Price_Index.csv")
