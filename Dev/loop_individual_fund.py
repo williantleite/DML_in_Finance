@@ -2,7 +2,7 @@
 """
 Created on Wed Apr  6 14:43:15 2022
 
-@author: gojja
+@author: gojja och willi
 """
 
 import pandas as pd

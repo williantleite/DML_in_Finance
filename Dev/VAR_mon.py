@@ -90,10 +90,33 @@ def time_fix(df):
         plt.axhline(0, linestyle='--', color='k', alpha=0.3)
     return(df)
 
+def corr_y_x_lag(df, lags):
+    values = np.zeros(shape=(lags,df.iloc[:,1:].shape[1]), dtype=object)
+    df_temp = df.iloc[:,1:df.shape[1]]
+    for i in range(df_temp.shape[1]):
+        for lag in range(1,lags):
+            y = df.iloc[lag:,0]
+            x = df_temp.iloc[:-lag,i]
+            values[lag,i] = pearsonr(y, x)[1]
+            print(df.columns[i+1],'Lag: %s'%lag)
+            print(values[lag,i])
+            print('------')
+    return(values)
+
+def corr_y_x_lag(df, lags):
+    for i in range(1,df.shape[1]):
+        for lag in range(1,lags):
+            y = df.iloc[lag:,0]
+            x = df.iloc[:-lag,0]
+        return [pearsonr(y, x)]
+
 #%% Load data
 
 y_p = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\passive_prices_m_df.csv", index_col=0)
-y_p = y_p.iloc[:,0:3].dropna()
+
+agg_y = y_p.iloc[:,:2]
+agg_y["mean"] = y_p.iloc[:,2:].mean(axis=1)
+agg_y = agg_y[np.isfinite(agg_y).all(axis = 1)]
 
 x = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\x_df.csv")
 recession = x.pop('recession')
@@ -126,7 +149,7 @@ hpi_df = transform_pad(house_price_index_df)
 
 #%% Update X
 
-df = pd.merge(y_p,x, on=['year', 'month'], how = "inner")
+df = pd.merge(agg_y,x, on=['year', 'month'], how = "inner")
 df = df.assign(day = 1)
 df.index = pd.to_datetime(df[['year', 'month', 'day']])
 df.drop(['year', 'month', 'day'], inplace=True, axis=1)
@@ -145,7 +168,7 @@ df.drop(['year', 'month', 'day'], inplace=True, axis=1)
 # plot_series(df_3.iloc[:,5])
 # plt.axhline(0, linestyle='--', color='k', alpha=0.3)
 
-# df_4 = Ch_Vol(df_3.iloc[:, 5])
+# df_4 = Ch_Vol(df_3.loc[:, 'nrou'])
 
 # plot_series(df_4)
 # plt.axhline(0, linestyle='--', color='k', alpha=0.3)
@@ -156,7 +179,6 @@ df.drop(['year', 'month', 'day'], inplace=True, axis=1)
 # plt.axhline(0, linestyle='--', color='k', alpha=0.3)
 
 #%% Testing a data frame with multiple vatribles:
-   
 X_time_fix = time_fix(df).iloc[1:,:]
 X_time_fix['year'], X_time_fix['month'] = X_time_fix.index.year, X_time_fix.index.month
 X_time_fix.insert(0, "year", X_time_fix.pop('year'))
@@ -170,18 +192,19 @@ variables_list = [X_time_fix,
 
 X_time_fix = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month'], how = "inner"), variables_list)
 
-def corr_y_x_lag(df, lags):
-    values = np.zeros(shape=(lags,df.iloc[:,1:].shape[1]), dtype=object)
-    df_temp = df.iloc[:,1:df.shape[1]]
-    for i in range(df_temp.shape[1]):
-        for lag in range(1,lags):
-            y = df.iloc[lag:,0]
-            x = df_temp.iloc[:-lag,i]
-            values[lag,i] = pearsonr(y, x)[1]
-            print(df.columns[i+1],'Lag: %s'%lag)
-            print(values[lag,i])
-            print('------')
-    return(values)
+X_time_fix.insert(3, "anxious_index_y", X_time_fix.pop('anxious_index_y'))
+X_time_fix.pop('anxious_index_x')
+X_time_fix.insert(6, "GDPC1", X_time_fix.pop("GDPC1"))
+X_time_fix.pop('gdp_growth')
+X_time_fix.insert(7, "USSTHPI", X_time_fix.pop("USSTHPI"))
+X_time_fix.pop('hpi')
+X_time_fix.insert(10, 'NROU', X_time_fix.pop('NROU'))
+X_time_fix.pop('nrou')
+
+X_time_fix = X_time_fix.rename({'anxious_index_y' : 'anxious_index', 
+                                'GDPC1' : 'gdp_growth',
+                                'USSTHPI' : 'hpi',
+                                'NROU' : 'nrou'}, axis = 1)
 
 lags = 24
 
@@ -189,14 +212,7 @@ p_val = corr_y_x_lag(X_time_fix,lags)[1:,:]
 p_val = pd.DataFrame(p_val).astype(float)
 p_val = p_val[p_val<=0.05]
 
-def corr_y_x_lag(df, lags):
-    for i in range(1,df.shape[1]):
-        for lag in range(1,lags):
-            y = df.iloc[lag:,0]
-            x = df.iloc[:-lag,0]
-        return [pearsonr(y, x)]
-
-# VAR model:
+#%% VAR model:
 
 cols = X_time_fix.columns.tolist()
 cols = cols[-10:] + cols[:-10]
@@ -205,7 +221,8 @@ X_time_fix = X_time_fix[cols]
 model = VAR(X_time_fix)
 model_fit = model.fit(maxlags=24)
 summ = model_fit.summary()
-model_fit.summary()
+summ_2 = summ._coef_table()
+summ_3 = summ.make()
 
 hjoadfsp =model_fit.get_eq_index('AAINX')
 
