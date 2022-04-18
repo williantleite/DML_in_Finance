@@ -13,6 +13,7 @@ from statsmodels.tsa.api import VAR
 from scipy.stats import pearsonr
 import numpy as np
 from functools import reduce
+from statsmodels.tsa.stattools import adfuller
 
 #%% Set Functions
 
@@ -65,8 +66,8 @@ def adding_date_variables(df):
 def transform_pad(df):
     df = adding_date_variables(df)
     df.iloc[:,2] = Normalization(df.iloc[:,2]) #Normalize
-    df.iloc[:,2] = df.iloc[:,2].diff()
-    df.iloc[:,2] = Ch_Vol(df.iloc[:,2])
+#    df.iloc[:,2] = df.iloc[:,2].diff()
+#    df.iloc[:,2] = Ch_Vol(df.iloc[:,2])
     df.iloc[:,2] = De_Sea(df.iloc[:,2])
     df["year"] = df["year"].astype(str)
     df['month'] = df['month'].astype(str)
@@ -80,10 +81,10 @@ def time_fix(df):
     for i in range(df.shape[1]):
         df.iloc[:,i] = Normalization(df.iloc[:,i])
         print('Normalization' ,df.columns[i], 'complete')
-        df.iloc[:,i] = DeTrend(df.iloc[:,i])
-        print('DeTrend', df.columns[i], 'complete')
-        df.iloc[:,i] = Ch_Vol(df.iloc[:,i])
-        print('Ch_Vol', df.columns[i], 'complete')
+#        df.iloc[:,i] = DeTrend(df.iloc[:,i])
+#        print('DeTrend', df.columns[i], 'complete')
+#        df.iloc[:,i] = Ch_Vol(df.iloc[:,i])
+#        print('Ch_Vol', df.columns[i], 'complete')
         df.iloc[:,i] = De_Sea(df.iloc[:,i])
         print('De_Sea', df.columns[i], 'complete')
         plot_series(df.iloc[:,i])
@@ -109,6 +110,20 @@ def corr_y_x_lag(df, lags):
             y = df.iloc[lag:,0]
             x = df.iloc[:-lag,0]
         return [pearsonr(y, x)]
+    
+def adf_test(df):
+    print("")
+    print ('Results of Dickey-Fuller Test: %s' %(df.name))
+    dftest = adfuller(df, autolag='AIC')
+    dfoutput = pd.Series(dftest[0:4], index=['Test Statistic','p-value','#Lags Used','Number of Observations Used'])
+    for key,value in dftest[4].items():
+        dfoutput['Critical Value (%s)'%key] = value
+    print (dfoutput)
+    
+def perform_adf_test(series):
+    result = adfuller(series)
+    print('ADF Statistic: %f' % result[0])
+    print('p-value: %f' % result[1])
 
 #%% Load data
 
@@ -120,6 +135,18 @@ agg_y = agg_y[np.isfinite(agg_y).all(axis = 1)]
 
 x = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\x_df.csv")
 recession = x.pop('recession')
+
+x.loc[:,'consumer_sent'] = x.loc[:,'consumer_sent'].pct_change(periods=1)
+x.loc[:,'inflation'] = x.loc[:,'inflation'].pct_change(periods=1)
+x.loc[:,'m2'] = x.loc[:,'m2'].pct_change(periods=1)
+x.loc[:,'hpi'] = x.loc[:,'hpi'].pct_change(periods=1)
+x = x.dropna()
+
+for i in range(x.shape[1]):
+    adf_test(x.iloc[:,i])
+
+x.pop('nrou')
+x.pop('interest_rate')
 
 #%% Fix the quarterly variables:
 
@@ -136,15 +163,11 @@ anxious_index_df = anxious_index_df.drop(["year", "quarter", "month"], axis = 1)
 gdp_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Real-GDP\Real_GDP.csv")
 gdp_df.iloc[:,1] = gdp_df.iloc[:,1].pct_change(periods=1)
 
-nrou_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Unemployment\Noncyclical_Rate_of_Unemployment.csv")
-nrou_df.iloc[:,1] = nrou_df.iloc[:,1].pct_change(periods=1)
-
 house_price_index_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\House prices\All-Transactions_House_Price_Index.csv")
 house_price_index_df.iloc[:,1] = house_price_index_df.iloc[:,1].pct_change(periods=1)
 
 anxious_index_df = transform_pad(anxious_index_df)
 gdp_df = transform_pad(gdp_df)
-nrou_df = transform_pad(nrou_df)
 hpi_df = transform_pad(house_price_index_df)
 
 #%% Update X
@@ -186,9 +209,8 @@ X_time_fix.insert(1, "month", X_time_fix.pop("month"))
 
 variables_list = [X_time_fix,
                   anxious_index_df, 
-                  gdp_df, 
-                  hpi_df, 
-                  nrou_df]
+                  gdp_df,
+                  hpi_df]
 
 X_time_fix = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month'], how = "inner"), variables_list)
 
@@ -198,19 +220,15 @@ X_time_fix.insert(6, "GDPC1", X_time_fix.pop("GDPC1"))
 X_time_fix.pop('gdp_growth')
 X_time_fix.insert(7, "USSTHPI", X_time_fix.pop("USSTHPI"))
 X_time_fix.pop('hpi')
-X_time_fix.insert(10, 'NROU', X_time_fix.pop('NROU'))
-X_time_fix.pop('nrou')
+X_time_fix.pop('year')
+X_time_fix.pop('month')
 
 X_time_fix = X_time_fix.rename({'anxious_index_y' : 'anxious_index', 
                                 'GDPC1' : 'gdp_growth',
-                                'USSTHPI' : 'hpi',
-                                'NROU' : 'nrou'}, axis = 1)
+                                'USSTHPI' : 'hpi_growth'}, axis = 1)
 
-lags = 24
-
-p_val = corr_y_x_lag(X_time_fix,lags)[1:,:]
-p_val = pd.DataFrame(p_val).astype(float)
-p_val = p_val[p_val<=0.05]
+for i in range(X_time_fix.shape[1]):
+    adf_test(X_time_fix.iloc[:,i])
 
 #%% VAR model:
 
@@ -218,14 +236,36 @@ cols = X_time_fix.columns.tolist()
 cols = cols[-10:] + cols[:-10]
 X_time_fix = X_time_fix[cols]
 
+lags = 24
+
 model = VAR(X_time_fix)
-model_fit = model.fit(maxlags=24)
+model_fit = model.fit(maxlags=lags)
 summ = model_fit.summary()
-summ_2 = summ._coef_table()
-summ_3 = summ.make()
+coef_table = summ._coef_table()
 
-hjoadfsp =model_fit.get_eq_index('AAINX')
+coef_df = np.zeros(shape=((1+X_time_fix.shape[1]*lags),5), dtype=object)
 
-hej = summ._coef_table
+for i in range(1+X_time_fix.shape[1]*lags):
+    coef_df[i,0] = coef_table[281+85*i:306+85*i].strip() #Name
+    coef_df[i,1] = coef_table[307+85*i:320+85*i] #Coeff
+    coef_df[i,2] = coef_table[321+85*i:335+85*i] #Std.error
+    coef_df[i,3] = coef_table[340+85*i:355+85*i] #t-stat
+    coef_df[i,4] = coef_table[356+85*i:366+85*i] #prob (p-val)
 
-VAR()
+coef_df = pd.DataFrame(coef_df, columns = ['var','coeff','std. err', 't-stat', 'p-val'])
+
+for i in range(1,coef_df.shape[1]):
+    coef_df = coef_df.astype({coef_df.iloc[:,i].name:'float'})
+
+coef_df_sig = coef_df.loc[coef_df['p-val'] <= 0.05, ['var','coeff','std. err', 't-stat', 'p-val']]
+coef_df_sig['lag'] = coef_df_sig.iloc[:,0].str.extract('(\d+)')
+coef_df_sig.loc[1:,'var'] = coef_df_sig.iloc[1:,0].str.split('.').str[1]
+
+for i in range(X_time_fix.shape[1]):
+    print(X_time_fix.columns[i])
+    perform_adf_test(X_time_fix.iloc[:,i])
+
+for i in range(X_time_fix.shape[1]):
+    plot_acf(X_time_fix.iloc[:,i])
+    plt.title(X_time_fix.columns[i], fontsize=16)
+    plt.show()
