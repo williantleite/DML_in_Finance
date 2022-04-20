@@ -14,6 +14,10 @@ from scipy.stats import pearsonr
 import numpy as np
 from functools import reduce
 from statsmodels.tsa.stattools import adfuller
+import seaborn as sns
+from sklearn.model_selection import TimeSeriesSplit
+import statsmodels.api as sm
+import matplotlib.pyplot as plt
 
 #%% Set Functions
 
@@ -68,7 +72,20 @@ def transform_pad(df):
     df.iloc[:,2] = Normalization(df.iloc[:,2]) #Normalize
 #    df.iloc[:,2] = df.iloc[:,2].diff()
 #    df.iloc[:,2] = Ch_Vol(df.iloc[:,2])
-    df.iloc[:,2] = De_Sea(df.iloc[:,2])
+#    df.iloc[:,2] = De_Sea(df.iloc[:,2])
+    df["year"] = df["year"].astype(str)
+    df['month'] = df['month'].astype(str)
+    df["DATE"] = df[["year", "month"]].agg("-".join, axis=1)
+    df = pad_monthly(df)
+    df = df.dropna()
+    return df
+
+def transform_hpi(df):
+    df = adding_date_variables(df)
+    df.iloc[:,2] = Normalization(df.iloc[:,2]) #Normalize
+    df.iloc[:,2] = df.iloc[:,2].diff()
+#    df.iloc[:,2] = Ch_Vol(df.iloc[:,2])
+#    df.iloc[:,2] = De_Sea(df.iloc[:,2])
     df["year"] = df["year"].astype(str)
     df['month'] = df['month'].astype(str)
     df["DATE"] = df[["year", "month"]].agg("-".join, axis=1)
@@ -85,8 +102,8 @@ def time_fix(df):
 #        print('DeTrend', df.columns[i], 'complete')
 #        df.iloc[:,i] = Ch_Vol(df.iloc[:,i])
 #        print('Ch_Vol', df.columns[i], 'complete')
-        df.iloc[:,i] = De_Sea(df.iloc[:,i])
-        print('De_Sea', df.columns[i], 'complete')
+#        df.iloc[:,i] = De_Sea(df.iloc[:,i])
+#        print('De_Sea', df.columns[i], 'complete')
         plot_series(df.iloc[:,i])
         plt.axhline(0, linestyle='--', color='k', alpha=0.3)
     return(df)
@@ -134,7 +151,8 @@ agg_y["mean"] = y_p.iloc[:,2:].mean(axis=1)
 agg_y = agg_y[np.isfinite(agg_y).all(axis = 1)]
 
 x = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\x_df.csv")
-recession = x.pop('recession')
+recession = x.iloc[:,:2]
+recession['recession'] = x.pop('recession')
 
 x.loc[:,'consumer_sent'] = x.loc[:,'consumer_sent'].pct_change(periods=1)
 x.loc[:,'inflation'] = x.loc[:,'inflation'].pct_change(periods=1)
@@ -168,7 +186,7 @@ house_price_index_df.iloc[:,1] = house_price_index_df.iloc[:,1].pct_change(perio
 
 anxious_index_df = transform_pad(anxious_index_df)
 gdp_df = transform_pad(gdp_df)
-hpi_df = transform_pad(house_price_index_df)
+hpi_df = transform_hpi(house_price_index_df)
 
 #%% Update X
 
@@ -210,7 +228,8 @@ X_time_fix.insert(1, "month", X_time_fix.pop("month"))
 variables_list = [X_time_fix,
                   anxious_index_df, 
                   gdp_df,
-                  hpi_df]
+                  hpi_df,
+                  recession]
 
 X_time_fix = reduce(lambda left,right: pd.merge(left, right, on=['year', 'month'], how = "inner"), variables_list)
 
@@ -231,6 +250,23 @@ for i in range(X_time_fix.shape[1]):
     adf_test(X_time_fix.iloc[:,i])
 
 #%% VAR model:
+    
+#%% Split in train-test using leave-one-out method
+
+tscv = TimeSeriesSplit(n_splits=424, test_size=1)
+forecast = pd.DataFrame()
+X_train_list = []
+X_test_list = []
+for train_index, test_index in tscv.split(X_time_fix):
+    X_train_list.append([train_index])
+    X_test_list.append([test_index])
+    X_train, X_test = X_time_fix.iloc[train_index], X_time_fix.iloc[test_index]
+    model = VAR(X_train)
+    model_fit = model.fit(7)    
+    laged_values = X_train.values[-7:]
+    forecast_temp = pd.Series(model_fit.forecast(y = laged_values, steps=1)[0][0],
+                              name = X_test.index.values.astype(int)[0])
+    forecast = forecast.append(forecast_temp)
 
 cols = X_time_fix.columns.tolist()
 cols = cols[-10:] + cols[:-10]
@@ -269,3 +305,43 @@ for i in range(X_time_fix.shape[1]):
     plot_acf(X_time_fix.iloc[:,i])
     plt.title(X_time_fix.columns[i], fontsize=16)
     plt.show()
+    
+#%% Forecast tryout:
+    
+#First we define the optimal number of legs using AIC
+
+results_aic = []
+for p in range(1,24):
+  results = model.fit(p)
+  results_aic.append(results.aic)
+
+results_bic = []
+for p in range(1,24):
+  results = model.fit(p)
+  results_bic.append(results.bic)
+  
+sns.set()
+plt.plot(list(np.arange(1,24,1)), results_aic)
+plt.xlabel("Order")
+plt.ylabel("AIC")
+plt.show()
+
+sns.set()
+plt.plot(list(np.arange(1,24,1)), results_bic)
+plt.xlabel("Order")
+plt.ylabel("BIC")
+plt.show()
+
+# Summaries
+fit_aic = model.fit(7)
+fit_bic = model.fit(1)
+fit_aic.summary()
+fit_bic.summary()
+
+# Forecast
+
+laged_values_aic = X_time_fix.iloc[:424,:].values[-7:]
+forecast_aic = pd.DataFrame(fit_aic.forecast(y = laged_values_aic, steps=10))
+forecast_aic
+
+forecast_aic_u = (forecast_aic.iloc[:,0] + agg_y.iloc[:,2].mean())*agg_y.iloc[:,2].std()
