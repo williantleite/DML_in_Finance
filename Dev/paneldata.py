@@ -19,6 +19,8 @@ from xgboost.sklearn import XGBRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, make_scorer
 import time
+from joblib import Parallel
+import os
 
 # =============================================================================
 #%% Functions
@@ -58,6 +60,27 @@ def transform_pad(df):
     df = df.dropna()
     return df
 
+def groupaverage(X, G):
+    omega_hat = pd.DataFrame(0, index=X.iloc[:,11:20].columns, columns=G)
+    for g in range(len(G)):
+        omega_hat[G.iloc[g]] = X.loc[X.variable.str.contains(G.iloc[g]), X.iloc[:,11:20].columns].mean()
+    omega_hat.index += '_mean'
+    omega_hat = omega_hat.T
+    return omega_hat
+
+def num_obs(df):
+    obs = np.zeros(shape = (df.shape[1]-2,1))
+    for i in range (df.shape[1]-2):
+        obs[i] = df.value_counts(subset=df.columns[i+2]).shape[0]
+    return(obs)
+
+def lagy(X, G):
+    omega_hat = pd.DataFrame(0, index=X.index, columns=["date", "variable", "value"])
+    omega_hat.iloc[:,0:3] = X.iloc[:, 0:3]
+    for g in range(len(G)):
+        for i in range(1,8):
+            omega_hat["lag_{}".format(i)] = X.groupby('variable').value.shift(i)
+    return omega_hat
 
 # =============================================================================
 #%% Loading the data
@@ -135,6 +158,46 @@ x['date'] = x[cols].apply(lambda x: '-'.join(x.values.astype(str)), axis="column
 x.insert(2, "date", x.pop("date"))
 
 # =============================================================================
+#%% Adding lagged variables
+# =============================================================================
+
+x_full = x.copy()
+
+for i in range(1,8):
+    x_lag = x.copy()
+    x_lag.iloc[:,3:]
+    x_lag.iloc[:,3:] = x.iloc[:,3:].shift(periods=i)
+    for j in range(x.shape[1]-3):
+        x_lag.rename(columns = {x_lag.columns[3+j]:str(x_lag.columns[3+j]+'lag'+ str(i))},inplace=True)
+    x_lag = x_lag.iloc[:,2:]
+    x_full = pd.merge(x_full,x_lag, on=['date'], how = "inner")
+
+x = x_full.dropna()
+
+# =============================================================================
+#%% Dropping funds with less than 8 obs
+# =============================================================================
+
+obs_p = pd.DataFrame(num_obs(y_p))
+obs_a = pd.DataFrame(num_obs(y_a))
+
+obs_p.index = y_p.columns[2:]
+obs_a.index = y_a.columns[2:]
+
+obs_few_p = obs_p[obs_p>=8].dropna()
+obs_few_a = obs_a[obs_a>=8].dropna()
+
+y_few_p = y_p[obs_few_p.index]
+y_few_p.insert(0,'month',y_p['month'])
+y_few_p.insert(0,'year',y_p['year'])
+y_p = y_few_p
+
+y_few_a = y_a[obs_few_a.index]
+y_few_a.insert(0,'month',y_a['month'])
+y_few_a.insert(0,'year',y_a['year'])
+y_a = y_few_a
+
+# =============================================================================
 #%% Creating of the panel_df
 # =============================================================================
 
@@ -152,6 +215,22 @@ variables_test_a.remove('month')
 y_long_p=pd.melt(y_p,id_vars='date',value_vars=variables_test_p)
 y_long_a=pd.melt(y_a,id_vars='date',value_vars=variables_test_a)
 
+# =============================================================================
+#%% Lagged y
+# =============================================================================
+g_p = y_long_p.loc[:,'variable'].drop_duplicates()
+g_a = y_long_a.loc[:, 'variable'].drop_duplicates()
+
+lag_y_p = lagy(y_long_p,g_p)
+lag_y_a = lagy(y_long_a,g_a)
+
+lag_y_p = lag_y_p.dropna()
+lag_y_a = lag_y_a.dropna()
+
+# =============================================================================
+#%% Creating of the panel_df pt2
+# =============================================================================
+
 df_long_p = pd.merge(y_long_p,x, on=['date'], how = "inner")
 df_long_a = pd.merge(y_long_a,x, on=['date'], how = "inner")
 
@@ -165,33 +244,50 @@ df_long_p = df_long_p.drop(['date'],axis=1)
 df_long_a = df_long_a.drop('date',axis=1)
 
 # =============================================================================
+#%% Adding means encoding of original X
+# =============================================================================
+
+df_long_p_avg = groupaverage(df_long_p, g_p)
+df_long_a_avg = groupaverage(df_long_a, g_a)
+
+df_long_p_enc = pd.merge(df_long_p, df_long_p_avg, on=['variable'], how='inner')
+df_long_a_enc = pd.merge(df_long_a, df_long_a_avg, on=['variable'], how='inner')
+
+# =============================================================================
 #%% Tuning parameters for XGBoost 
 # =============================================================================
 
 #%% Y-task
 ### Passive
 
-X_p = df_long_p.iloc[:,4:]
-y_p = df_long_p.iloc[:, 1]
-xgb_param = {'learning_rate' : [0.5], 
+X_p = df_long_p_enc.iloc[:,4:]
+y_p = df_long_p_enc.iloc[:, 3]
+xgb_param = {'learning_rate' : [0.2], 
              'objective' : ['reg:squarederror'], 
-             'reg_lambda' : np.arange(0, 2.25, 0.25),
-             'subsample' : np.arange(0.1, 1.1, 0.1),
-             'colsample_bytree' : np.arange(0.1, 1.1, 0.1),
+             'n_estimators' : np.arange(100,1150,150),
+             'reg_lambda' : np.arange(0, 2.5, 0.5),
+             'subsample' : np.arange(0.1, 1.2, 0.2),
+             'colsample_bytree' : np.arange(0.1, 1.2, 0.2),
              'max_depth' : np.arange(2,11)}
 
-mse = make_scorer(mean_squared_error)
+# mse = make_scorer(mean_squared_error, greater_is_better = False)
 
 xgb_tune_cv_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                              xgb_param, 
-                             #scoring=['neg_mean_squared_error', 'r2'], 
-                             scoring = mse,
-                             cv=5, 
-                             refit=True, 
-                             verbose = 3,
+                             scoring=['neg_mean_squared_error', 'r2'], 
+                             # scoring = mse,
+                             cv=2, 
+                             refit='r2', 
+                             verbose = 0,
                              n_jobs=-1)#turning to +1 lets you see at what iteration it is currently, but using -1 allows the use of all cores. 
 
-xgb_tune_cv_y_p.fit(X_p, y_p)#took 7 hours with n_jobs = 1
+os.environ['JOBLIB_TEMP_FOLDER'] = r'F:\Temp' #necessary for being able to handle the large intermediate results. IF this doesnt work try pathing it to F
+
+a = time.time()
+# with Parallel(max_nbytes=None): #Due to limitations in joblib::Parallels we need to use this fix so that the calculations do not consume all available disk memory. This was not necessary once I pathed the intermediate results to disk that had 500gb free. If you dont have it you should use the Parallel() trick.
+xgb_tune_cv_y_p.fit(X_p, y_p)
+time_cv_y_p = time.time()-a
+
 best_params_y_p = xgb_tune_cv_y_p.best_params_
 
 best_score_y_p = xgb_tune_cv_y_p.best_score_
@@ -199,8 +295,9 @@ best_score_y_p = xgb_tune_cv_y_p.best_score_
 print('R2: ', r2_score(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
 
-xgb_param_eta_y_p = {'learning_rate' : np.arange(0.01, 0.301, 0.01), 
+xgb_param_eta_y_p = {'learning_rate' : np.arange(0.01, 0.201, 0.01), 
                      'objective' : ['reg:squarederror'], 
+                     'n_estimators' : [best_params_y_p['n_estimators']],
                      'reg_lambda' : [best_params_y_p['reg_lambda']],
                      'subsample' : [best_params_y_p['subsample']],
                      'colsample_bytree' : [best_params_y_p['colsample_bytree']],
@@ -208,14 +305,17 @@ xgb_param_eta_y_p = {'learning_rate' : np.arange(0.01, 0.301, 0.01),
 
 xgb_tune_cv_eta_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                    xgb_param_eta_y_p, 
-                                   #scoring=['neg_mean_squared_error', 'r2'], 
-                                   scoring = mse,
-                                   cv=5, 
-                                   refit=True, 
-                                   verbose = 3,
+                                   scoring=['neg_mean_squared_error', 'r2'], 
+                                   # scoring = mse,
+                                   cv=2, 
+                                   refit='r2', 
+                                   verbose = 0,
                                    n_jobs=-1) 
 
+a = time.time()
 xgb_tune_cv_eta_y_p.fit(X_p, y_p)#took just a few minutes
+time_cv_eta_y_p = time.time() - a
+
 best_params_eta_y_p = xgb_tune_cv_eta_y_p.best_params_
 
 best_score_eta_y_p = xgb_tune_cv_eta_y_p.best_score_
@@ -226,27 +326,23 @@ print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_t
 #%% Y-task
 ### Active
 
-X_a = df_long_a.iloc[:,4:]
-y_a = df_long_a.iloc[:,1]
+X_a = df_long_a_enc.iloc[:,4:]
+y_a = df_long_a_enc.iloc[:,3]
 
 xgb_tune_cv_y_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                xgb_param, 
-                               #scoring=['neg_mean_squared_error', 'r2'], 
-                               scoring = mse,
-                               cv=5, 
-                               refit=True, 
-                               verbose = 3,
+                               scoring=['neg_mean_squared_error', 'r2'], 
+                               # scoring = mse,
+                               cv=2, 
+                               refit='r2', 
+                               verbose = 0,
                                n_jobs=-1) 
 
-import os
-os.environ['JOBLIB_TEMP_FOLDER'] = r'F:\Temp' #necessary for being able to handle the large intermediate results. IF this doesnt work try pathing it to F
-
-from joblib import Parallel
-
 a = time.time()
-with Parallel(max_nbytes=None):
-    xgb_tune_cv_y_a.fit(X_a, y_a) #Due to limitations in joblib::Parallels we need to use this fix so that the calculations do not consume all available disk memory. This was not necessary once I pathed the intermediate results to disk that had 500gb free. If you dont have it you should use the Parallel() trick.
-time_passed = time.time()-a
+# with Parallel(max_nbytes=None):
+xgb_tune_cv_y_a.fit(X_a, y_a) 
+time_cv_y_a = time.time()-a
+
 best_params_y_a = xgb_tune_cv_y_a.best_params_
 
 best_score_a = xgb_tune_cv_y_a.best_score_
@@ -254,8 +350,9 @@ best_score_a = xgb_tune_cv_y_a.best_score_
 print('R2: ', r2_score(y_pred = xgb_tune_cv_y_a.predict(X_a), y_true = y_a))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_y_a.predict(X_a), y_true = y_a))
 
-xgb_param_eta_y_a = {'learning_rate' : np.arange(0.01, 0.301, 0.01), 
+xgb_param_eta_y_a = {'learning_rate' : np.arange(0.01, 0.201, 0.01), 
                      'objective' : ['reg:squarederror'], 
+                     'n_estimators' : [best_params_y_a['n_estimators']],
                      'reg_lambda' : [best_params_y_a['reg_lambda']],
                      'subsample' : [best_params_y_a['subsample']],
                      'colsample_bytree' : [best_params_y_a['colsample_bytree']],
@@ -263,16 +360,16 @@ xgb_param_eta_y_a = {'learning_rate' : np.arange(0.01, 0.301, 0.01),
 
 xgb_tune_cv_eta_y_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                    xgb_param_eta_y_a, 
-                                   #scoring=['neg_mean_squared_error', 'r2'], 
-                                   scoring = mse,
-                                   cv=5, 
-                                   refit=True, 
-                                   verbose = 3,
+                                   scoring=['neg_mean_squared_error', 'r2'], 
+                                   # scoring = mse,
+                                   cv=2, 
+                                   refit='r2', 
+                                   verbose = 0,
                                    n_jobs=-1) 
 
 a = time.time()
 xgb_tune_cv_eta_y_a.fit(X_a, y_a)
-time_passed2 = time.time()-a
+time_cv_eta_y_a = time.time()-a
 
 best_params_eta_y_a = xgb_tune_cv_eta_y_a.best_params_
 
@@ -286,21 +383,21 @@ print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_a.predict(X_a), y_t
 
 var_int = 'i_rate_growth'
 
-d_p = df_long_p.loc[:,var_int]
-X_p_d = df_long_p.iloc[:,4:]
+d_p = df_long_p_enc.loc[:,var_int]
+X_p_d = df_long_p_enc.iloc[:,4:]
 X_p_d = X_p_d.drop(var_int, axis = 1)
 
 xgb_tune_cv_d_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                            xgb_param, 
-                           scoring = mse, 
-                           cv=5, 
-                           refit=True, 
-                           verbose = 3,
+                           scoring = ['neg_mean_squared_error', 'r2'],  
+                           cv=2, 
+                           refit='r2', 
+                           verbose = 0,
                            n_jobs=-1) 
 
 a = time.time()
 xgb_tune_cv_d_p.fit(X_p_d, d_p)
-time_passed3 = time.time()-a
+time_cv_d_p = time.time()-a
 
 best_params_d_p = xgb_tune_cv_d_p.best_params_
 
@@ -309,8 +406,9 @@ best_score_d_p = xgb_tune_cv_d_p.best_score_
 print('R2: ', r2_score(y_pred = xgb_tune_cv_d_p.predict(X_p_d), y_true = d_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_d_p.predict(X_p_d), y_true = d_p))
 
-xgb_param_eta_d_p = {'learning_rate' : np.arange(0.01, 0.301, 0.01), 
+xgb_param_eta_d_p = {'learning_rate' : np.arange(0.01, 0.201, 0.01), 
                      'objective' : ['reg:squarederror'], 
+                     'n_estimators' : [best_params_d_p['n_estimators']],
                      'reg_lambda' : [best_params_d_p['reg_lambda']],
                      'subsample' : [best_params_d_p['subsample']],
                      'colsample_bytree' : [best_params_d_p['colsample_bytree']],
@@ -318,15 +416,15 @@ xgb_param_eta_d_p = {'learning_rate' : np.arange(0.01, 0.301, 0.01),
 
 xgb_tune_cv_eta_d_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                    xgb_param_eta_d_p, 
-                                   scoring=mse, 
-                                   cv=5, 
-                                   refit=True, 
-                                   verbose = 3,
+                                   scoring=['neg_mean_squared_error', 'r2'],  
+                                   cv=2, 
+                                   refit='r2', 
+                                   verbose = 0,
                                    n_jobs=-1)
 
 a = time.time()
 xgb_tune_cv_eta_d_p.fit(X_p_d, d_p)
-time_passed4 = time.time()-a
+time_cv_eta_d_p = time.time()-a
 
 best_params_eta_d_p = xgb_tune_cv_eta_d_p.best_params_
 best_score_eta_d_p = xgb_tune_cv_eta_d_p.best_score_
@@ -337,21 +435,21 @@ print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_d_p.predict(X_p_d), y
 #%% D-task
 ### Active
 
-d_a = df_long_a.loc[:,var_int]
-X_a_d = df_long_a.iloc[:,4:]
+d_a = df_long_a_enc.loc[:,var_int]
+X_a_d = df_long_a_enc.iloc[:,4:]
 X_a_d = X_a_d.drop(var_int, axis = 1)
 
 xgb_tune_cv_d_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                            xgb_param, 
-                           scoring=mse, 
-                           cv=5, 
-                           refit=True, 
-                           verbose = 3,
+                           scoring=['neg_mean_squared_error', 'r2'],  
+                           cv=2, 
+                           refit='r2', 
+                           verbose = 0,
                            n_jobs=-1) 
 
 a = time.time()
 xgb_tune_cv_d_a.fit(X_a_d, d_a)
-time_passed5 = time.time()-a
+time_cv_d_a = time.time()-a
 
 best_params_d_a = xgb_tune_cv_d_a.best_params_
 best_score_d_a = xgb_tune_cv_d_a.best_score_
@@ -361,6 +459,7 @@ print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_d_a.predict(X_a_d), y_tru
 
 xgb_param_eta_d_a = {'learning_rate' : np.arange(0.01, 0.301, 0.01), 
                      'objective' : ['reg:squarederror'], 
+                     'n_estimators' : [best_params_d_a['n_estimators']],
                      'reg_lambda' : [best_params_d_a['reg_lambda']],
                      'subsample' : [best_params_d_a['subsample']],
                      'colsample_bytree' : [best_params_d_a['colsample_bytree']],
@@ -368,15 +467,15 @@ xgb_param_eta_d_a = {'learning_rate' : np.arange(0.01, 0.301, 0.01),
 
 xgb_tune_cv_eta_d_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                    xgb_param_eta_d_a, 
-                                   scoring=mse, 
-                                   cv=5, 
-                                   refit=True, 
-                                   verbose = 3,
+                                   scoring=['neg_mean_squared_error', 'r2'],  
+                                   cv=2, 
+                                   refit='r2', 
+                                   verbose = 0,
                                    n_jobs=-1)
 
 a = time.time()
 xgb_tune_cv_eta_d_a.fit(X_a_d, d_a)
-time_passed6 = time.time()-a
+time_cv_eta_d_a = time.time()-a
 
 best_params_eta_d_a = xgb_tune_cv_eta_d_a.best_params_
 best_score_eta_d_a = xgb_tune_cv_eta_d_a.best_score_
