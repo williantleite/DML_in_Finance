@@ -14,7 +14,6 @@ from sklearn.preprocessing import StandardScaler
 from functools import reduce
 from sklearn import linear_model
 import numpy as np
-import xgboost as xgb
 from xgboost.sklearn import XGBRegressor
 from sklearn.model_selection import GridSearchCV
 from sklearn.metrics import r2_score, mean_squared_error, make_scorer
@@ -253,6 +252,12 @@ df_long_a_avg = groupaverage(df_long_a, g_a)
 df_long_p_enc = pd.merge(df_long_p, df_long_p_avg, on=['variable'], how='inner')
 df_long_a_enc = pd.merge(df_long_a, df_long_a_avg, on=['variable'], how='inner')
 
+# df_long_p_enc.to_csv("df_long_p_enc.csv", index=True)
+# df_long_a_enc.to_csv("df_long_a_enc.csv", index=True)
+
+df_long_p_enc = pd.read_csv(r"F:\Thesis\Data\Clean\df_long_p_enc_df.csv", index_col=0)
+df_long_a_enc = pd.read_csv(r"F:\Thesis\Data\Clean\df_long_a_enc_df.csv", index_col=0)
+
 # =============================================================================
 #%% Tuning parameters for XGBoost 
 # =============================================================================
@@ -264,11 +269,11 @@ X_p = df_long_p_enc.iloc[:,4:]
 y_p = df_long_p_enc.iloc[:, 3]
 xgb_param = {'learning_rate' : [0.2], 
              'objective' : ['reg:squarederror'], 
-             'n_estimators' : np.arange(100,1150,150),
-             'reg_lambda' : np.arange(0, 2.5, 0.5),
-             'subsample' : np.arange(0.1, 1.2, 0.2),
-             'colsample_bytree' : np.arange(0.1, 1.2, 0.2),
-             'max_depth' : np.arange(2,11)}
+             'n_estimators' : [200,500,1000],
+             'reg_lambda' : [0,1,2],
+             'subsample' : [0.3,0.6,0.9],
+             'colsample_bytree' : [0.3,0.6,0.9],
+             'max_depth' : [2,6,10]}
 
 # mse = make_scorer(mean_squared_error, greater_is_better = False)
 
@@ -278,10 +283,11 @@ xgb_tune_cv_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='g
                              # scoring = mse,
                              cv=2, 
                              refit='r2', 
-                             verbose = 0,
-                             n_jobs=-1)#turning to +1 lets you see at what iteration it is currently, but using -1 allows the use of all cores. 
+                             verbose = 3,
+                             n_jobs=-1,
+                             pre_dispatch=2)#turning to +1 lets you see at what iteration it is currently, but using -1 allows the use of all cores. 
 
-os.environ['JOBLIB_TEMP_FOLDER'] = r'F:\Temp' #necessary for being able to handle the large intermediate results. IF this doesnt work try pathing it to F
+# os.environ['JOBLIB_TEMP_FOLDER'] = r'F:\Temp' #necessary for being able to handle the large intermediate results. IF this doesnt work try pathing it to F
 
 a = time.time()
 # with Parallel(max_nbytes=None): #Due to limitations in joblib::Parallels we need to use this fix so that the calculations do not consume all available disk memory. This was not necessary once I pathed the intermediate results to disk that had 500gb free. If you dont have it you should use the Parallel() trick.
@@ -289,8 +295,6 @@ xgb_tune_cv_y_p.fit(X_p, y_p)
 time_cv_y_p = time.time()-a
 
 best_params_y_p = xgb_tune_cv_y_p.best_params_
-
-best_score_y_p = xgb_tune_cv_y_p.best_score_
 
 print('R2: ', r2_score(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
@@ -310,18 +314,20 @@ xgb_tune_cv_eta_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predicto
                                    cv=2, 
                                    refit='r2', 
                                    verbose = 0,
-                                   n_jobs=-1) 
+                                   n_jobs=-1,
+                                   pre_dispatch=2) 
 
 a = time.time()
-xgb_tune_cv_eta_y_p.fit(X_p, y_p)#took just a few minutes
+xgb_tune_cv_eta_y_p.fit(X_p, y_p)
 time_cv_eta_y_p = time.time() - a
 
 best_params_eta_y_p = xgb_tune_cv_eta_y_p.best_params_
 
-best_score_eta_y_p = xgb_tune_cv_eta_y_p.best_score_
-
 print('R2: ', r2_score(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_true = y_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_true = y_p))
+
+np.save("best_params_eta_y_p.npy", best_params_eta_y_p)
+test = np.load('best_params_eta_y_p.npy',allow_pickle='TRUE').item()
 
 #%% Y-task
 ### Active
@@ -329,13 +335,21 @@ print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_t
 X_a = df_long_a_enc.iloc[:,4:]
 y_a = df_long_a_enc.iloc[:,3]
 
+xgb_param = {'learning_rate' : [0.2], 
+             'objective' : ['reg:squarederror'], 
+             'n_estimators' : [200],
+             'reg_lambda' : [0,1,2],
+             'subsample' : [0.3,0.6,0.9],
+             'colsample_bytree' : [0.3,0.6,0.9],
+             'max_depth' : [2,6,10]}
+
 xgb_tune_cv_y_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='gpu_predictor'), 
                                xgb_param, 
                                scoring=['neg_mean_squared_error', 'r2'], 
                                # scoring = mse,
                                cv=2, 
                                refit='r2', 
-                               verbose = 0,
+                               verbose = 1,
                                n_jobs=-1) 
 
 a = time.time()
@@ -344,8 +358,6 @@ xgb_tune_cv_y_a.fit(X_a, y_a)
 time_cv_y_a = time.time()-a
 
 best_params_y_a = xgb_tune_cv_y_a.best_params_
-
-best_score_a = xgb_tune_cv_y_a.best_score_
 
 print('R2: ', r2_score(y_pred = xgb_tune_cv_y_a.predict(X_a), y_true = y_a))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_y_a.predict(X_a), y_true = y_a))
@@ -364,8 +376,9 @@ xgb_tune_cv_eta_y_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predicto
                                    # scoring = mse,
                                    cv=2, 
                                    refit='r2', 
-                                   verbose = 0,
-                                   n_jobs=-1) 
+                                   verbose = 1,
+                                   n_jobs=-1,
+                                   pre_dispatch = 2) 
 
 a = time.time()
 xgb_tune_cv_eta_y_a.fit(X_a, y_a)
@@ -373,13 +386,23 @@ time_cv_eta_y_a = time.time()-a
 
 best_params_eta_y_a = xgb_tune_cv_eta_y_a.best_params_
 
-best_score_eta_y_a = xgb_tune_cv_eta_y_a.best_score_
-
 print('R2: ', r2_score(y_pred = xgb_tune_cv_eta_y_a.predict(X_a), y_true = y_a))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_a.predict(X_a), y_true = y_a))
 
+np.save("best_params_eta_y_a.npy", best_params_eta_y_a)
+
 #%% D-task
 ### Passive
+df_long_p_enc = pd.read_csv(r"F:\Thesis\Data\Clean\df_long_p_enc_df.csv", index_col=0)
+df_long_a_enc = pd.read_csv(r"F:\Thesis\Data\Clean\df_long_a_enc_df.csv", index_col=0)
+
+xgb_param = {'learning_rate' : [0.2], 
+             'objective' : ['reg:squarederror'], 
+             'n_estimators' : [200,500,1000],
+             'reg_lambda' : [0,1,2],
+             'subsample' : [0.3,0.6,0.9],
+             'colsample_bytree' : [0.3,0.6,0.9],
+             'max_depth' : [2,6,10]}
 
 var_int = 'i_rate_growth'
 
@@ -392,7 +415,7 @@ xgb_tune_cv_d_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='g
                            scoring = ['neg_mean_squared_error', 'r2'],  
                            cv=2, 
                            refit='r2', 
-                           verbose = 0,
+                           verbose = 1,
                            n_jobs=-1) 
 
 a = time.time()
@@ -419,7 +442,7 @@ xgb_tune_cv_eta_d_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predicto
                                    scoring=['neg_mean_squared_error', 'r2'],  
                                    cv=2, 
                                    refit='r2', 
-                                   verbose = 0,
+                                   verbose = 1,
                                    n_jobs=-1)
 
 a = time.time()
@@ -431,6 +454,8 @@ best_score_eta_d_p = xgb_tune_cv_eta_d_p.best_score_
 
 print('R2: ', r2_score(y_pred = xgb_tune_cv_eta_d_p.predict(X_p_d), y_true = d_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_d_p.predict(X_p_d), y_true = d_p))
+
+np.save("best_params_eta_d_p.npy", best_params_eta_d_p)
 
 #%% D-task
 ### Active
