@@ -285,7 +285,7 @@ xgb_tune_cv_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='g
                              refit='r2', 
                              verbose = 3,
                              n_jobs=-1,
-                             pre_dispatch=2)#turning to +1 lets you see at what iteration it is currently, but using -1 allows the use of all cores. 
+                             pre_dispatch=4)#turning to +1 lets you see at what iteration it is currently, but using -1 allows the use of all cores. 
 
 # os.environ['JOBLIB_TEMP_FOLDER'] = r'F:\Temp' #necessary for being able to handle the large intermediate results. IF this doesnt work try pathing it to F
 
@@ -299,7 +299,7 @@ best_params_y_p = xgb_tune_cv_y_p.best_params_
 print('R2: ', r2_score(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_y_p.predict(X_p), y_true = y_p))
 
-xgb_param_eta_y_p = {'learning_rate' : np.arange(0.01, 0.201, 0.01), 
+xgb_param_eta_y_p = {'learning_rate' : [best_params_y_p['learning_rate']], #np.arange(0.01, 0.201, 0.01)
                      'objective' : ['reg:squarederror'], 
                      'n_estimators' : [best_params_y_p['n_estimators']],
                      'reg_lambda' : [best_params_y_p['reg_lambda']],
@@ -314,12 +314,11 @@ xgb_tune_cv_eta_y_p = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predicto
                                    cv=2, 
                                    refit='r2', 
                                    verbose = 0,
-                                   n_jobs=-1,
-                                   pre_dispatch=2) 
+                                   n_jobs=-1) 
 
 a = time.time()
 xgb_tune_cv_eta_y_p.fit(X_p, y_p)
-time_cv_eta_y_p = time.time() - a
+time_cv_eta_y_p = time.time()-a
 
 best_params_eta_y_p = xgb_tune_cv_eta_y_p.best_params_
 
@@ -327,7 +326,7 @@ print('R2: ', r2_score(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_true = y_p))
 print('MSE: ', mean_squared_error(y_pred = xgb_tune_cv_eta_y_p.predict(X_p), y_true = y_p))
 
 np.save("best_params_eta_y_p.npy", best_params_eta_y_p)
-test = np.load('best_params_eta_y_p.npy',allow_pickle='TRUE').item()
+best_params_y_p = np.load('best_params_eta_y_p.npy',allow_pickle='TRUE').item()
 
 #%% Y-task
 ### Active
@@ -469,7 +468,7 @@ xgb_tune_cv_d_a = GridSearchCV(XGBRegressor(tree_method='gpu_hist', predictor='g
                            scoring=['neg_mean_squared_error', 'r2'],  
                            cv=2, 
                            refit='r2', 
-                           verbose = 0,
+                           verbose = 1,
                            n_jobs=-1) 
 
 a = time.time()

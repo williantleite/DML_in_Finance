@@ -53,7 +53,7 @@ def De_Sea(df):
 
 def pad_monthly(df):
     df["DATE"] = pd.to_datetime(df["DATE"]).dt.to_period("M")
-    df = df.set_index("DATE").resample("M").pad()
+    df = df.set_index("DATE").resample("M").ffill()
     df["year"], df["month"] = df.index.year, df.index.month
     df.insert(0, "year", df.pop("year"))
     df.insert(1, "month", df.pop("month"))
@@ -144,13 +144,18 @@ def perform_adf_test(series):
 
 #%% Load data
 
-y_p = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\passive_prices_m_df.csv", index_col=0)
+y_p = pd.read_csv(r"F:\Thesis\Data\Clean\passive_prices_m_df.csv", index_col=0)
+y_a = pd.read_csv(r"F:\Thesis\Data\Clean\active_prices_m_df.csv", index_col=0)
 
 agg_y = y_p.iloc[:,:2]
 agg_y["mean"] = y_p.iloc[:,2:].mean(axis=1)
 agg_y = agg_y[np.isfinite(agg_y).all(axis = 1)]
 
-x = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Clean\x_df.csv")
+agg_a = y_a.iloc[:,:2]
+agg_a['mean'] = y_a.iloc[:,2:].mean(axis=1)
+agg_a = agg_a[np.isfinite(agg_a).all(axis=1)]
+
+x = pd.read_csv(r"F:\Thesis\Data\Clean\x_df.csv")
 recession = x.iloc[:,:2]
 recession['recession'] = x.pop('recession')
 
@@ -168,7 +173,7 @@ x.pop('interest_rate')
 
 #%% Fix the quarterly variables:
 
-anxious_index_df = pd.read_excel(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Anxious Index\anxious_index_chart.xlsx")
+anxious_index_df = pd.read_excel(r"F:\Thesis\Data\Raw Data\Other Variables\Anxious Index\anxious_index_chart.xlsx")
 anxious_index_df = anxious_index_df.iloc[3:,0:3] #Here we exclude the first three lines because they are empty, and also the last column because it is a variable we are not interested in.
 anxious_index_df.columns = ["year", "quarter", "anxious_index"]
 anxious_index_df = anxious_index_df.astype({"anxious_index": "float64"})
@@ -178,10 +183,10 @@ anxious_index_df["year"] = anxious_index_df["year"].astype(str)
 anxious_index_df["DATE"] = anxious_index_df[["year", "month"]].agg("-".join, axis=1)
 anxious_index_df = anxious_index_df.drop(["year", "quarter", "month"], axis = 1)
 
-gdp_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\Real-GDP\Real_GDP.csv")
+gdp_df = pd.read_csv(r"F:\Thesis\Data\Raw Data\Other Variables\Real-GDP\Real_GDP.csv")
 gdp_df.iloc[:,1] = gdp_df.iloc[:,1].pct_change(periods=1)
 
-house_price_index_df = pd.read_csv(r"C:\Users\willi\Documents\Python\Thesis\Data\Raw Data\Other Variables\House prices\All-Transactions_House_Price_Index.csv")
+house_price_index_df = pd.read_csv(r"F:\Thesis\Data\Raw Data\Other Variables\House prices\All-Transactions_House_Price_Index.csv")
 house_price_index_df.iloc[:,1] = house_price_index_df.iloc[:,1].pct_change(periods=1)
 
 anxious_index_df = transform_pad(anxious_index_df)
@@ -190,7 +195,7 @@ hpi_df = transform_hpi(house_price_index_df)
 
 #%% Update X
 
-df = pd.merge(agg_y,x, on=['year', 'month'], how = "inner")
+df = pd.merge(agg_a,x, on=['year', 'month'], how = "inner")
 df = df.assign(day = 1)
 df.index = pd.to_datetime(df[['year', 'month', 'day']])
 df.drop(['year', 'month', 'day'], inplace=True, axis=1)
@@ -345,3 +350,12 @@ forecast_aic = pd.DataFrame(fit_aic.forecast(y = laged_values_aic, steps=10))
 forecast_aic
 
 forecast_aic_u = (forecast_aic.iloc[:,0] + agg_y.iloc[:,2].mean())*agg_y.iloc[:,2].std()
+
+#%% Plot detrended variables
+
+fig, axs = plt.subplots(2, 4, figsize=(24, 12))
+axe = axs.ravel()
+for i in range(X_time_fix.iloc[:,1:9].shape[1]):
+    X_time_fix.iloc[:,(1+i)].plot(ax=axe[i], title=X_time_fix.iloc[:,(1+i)].name)
+fig.suptitle('Model predictors (post processing)', fontsize=16, y=.93)
+plt.show()
