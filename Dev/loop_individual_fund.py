@@ -3,6 +3,8 @@
 Created on Wed Apr  6 14:43:15 2022
 
 @author: gojja och willi
+DISCLAIMER: This script was ultimately not used for the research! This was part of a series of tests and could be a path towards future research.
+
 """
 
 import pandas as pd
@@ -89,16 +91,7 @@ def plot_history(history):
 
 plot_history(history)
         
-
 # fix the scaling so that we fit on the train and apply on the train, val and test seperatly.
-
-
-
-
-
-
-
-
 
 n_fund_p = pd.DataFrame(ind_fund(df))
 n_fund_sort = n_fund.sort_values(by=[0])
@@ -109,9 +102,7 @@ n_fund_count = n_fund.assign(more_2000=lambda x: x.values >= 2000)
 n_fund_count = n_fund.assign(more_3000=lambda x: x.values >= 3000)
 n_fund_count = n_fund.assign(more_6000=lambda x: x.values >= 6000)
 
-
 print(sum(n_fund_count.iloc[:,1]))
-
 
 n_fund_2 = pd.DataFrame(ind_fund(df_2))
 
@@ -121,22 +112,14 @@ n_fund_2_count = n_fund_2.assign(more_2000=lambda x: x.values >= 2000)
 n_fund_2_count = n_fund_2.assign(more_3000=lambda x: x.values >= 3000)
 n_fund_2_count = n_fund_2.assign(more_6000=lambda x: x.values >= 6000)
 
-
 print(sum(n_fund_2_count.iloc[:,1]))
-
 
 # Randomly assigning train, validation and test dataset index
 def r_tvt(n_obs):
     for i in range(n_fund.shape[0]):
-        
-
 
 df_2.index = pd.to_datetime(df_2.index)
 df_2["year"], df_2["month"], df_2["day"] = df_2.index.year, df_2.index.month, df_2.index.day
 df_2.insert(0, "year", df_2.pop("year"))
 df_2.insert(1, "month", df_2.pop("month"))
 df_2.insert(2, "day", df_2.pop("day"))
-
-
-
-
